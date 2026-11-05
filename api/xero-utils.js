@@ -69,3 +69,13 @@ export async function getXeroToken() {
     .eq('id', data.id);
 
   if (updateError) {
+    throw new Error(`Failed to save refreshed tokens to Supabase: ${updateError.message}`);
+  }
+
+  return {
+    ...data,
+    access_token: newAccessToken,
+    refresh_token: newRefreshToken,
+    expires_at: newExpiresAt
+  };
+}
