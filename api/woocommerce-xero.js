@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getXeroToken } from './auth.js';
+import { getXeroToken } from './xero-utils.js';
 
 export async function processWooOrderToXero(order) {
   // If the payload is missing line items (status change, customer event, or test ping), skip gracefully
