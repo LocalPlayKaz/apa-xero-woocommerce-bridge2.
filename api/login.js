@@ -1,10 +1,10 @@
 export default async function handler(req, res) {
   const clientId = process.env.XERO_CLIENT_ID;
-  const redirectUri = process.env.XERO_REDIRECT_URI;
+  const redirectUri = process.env.XERO_REDIRECT_URI || 'https://apa-xero-woocommerce-bridge2.vercel.app/api/auth';
 
-  if (!clientId || !redirectUri) {
+  if (!clientId) {
     return res.status(500).json({ 
-      error: 'Missing XERO_CLIENT_ID or XERO_REDIRECT_URI in Vercel environment variables.' 
+      error: 'Missing XERO_CLIENT_ID in Vercel environment variables.' 
     });
   }
 
@@ -30,6 +30,5 @@ export default async function handler(req, res) {
 
   const authUrl = `https://login.xero.com/identity/connect/authorize?${params.toString()}`;
 
-  // Redirect the browser to Xero's login & consent screen
   return res.redirect(302, authUrl);
 }
