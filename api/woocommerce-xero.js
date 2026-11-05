@@ -47,9 +47,9 @@ export async function processWooOrderToXero(order) {
     throw new Error('Missing Xero Tenant ID in Supabase or environment variables.');
   }
 
-  // Send to Xero API using the active access token
+  // Send to Xero API using the active access token and corrected endpoint path
   const response = await axios.post(
-    'https://api.xero.com/api.x.0/Invoices',
+    'https://api.xero.com/api.xro/2.0/Invoices',
     { Invoices: [invoice] },
     {
       headers: {
