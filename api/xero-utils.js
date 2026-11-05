@@ -22,5 +22,50 @@ export async function getXeroToken() {
     throw new Error(`Failed to fetch Xero token from Supabase: ${error?.message || 'No token rows found'}`);
   }
 
-  return data;
-}
+  const currentTime = Math.floor(Date.now() / 1000);
+  
+  // Check if token is expired or will expire in the next 60 seconds
+  if (data.expires_at && data.expires_at > currentTime + 60) {
+    // Token is still valid
+    return data;
+  }
+
+  console.log('Xero access token expired. Refreshing token...');
+
+  // Token is expired, use the refresh token to get a new one
+  const tokenResponse = await fetch('https://identity.xero.com/connect/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': `Basic ${Buffer.from(
+        `${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`
+      ).toString('base64')}`
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: data.refresh_token
+    })
+  });
+
+  const tokenData = await tokenResponse.json();
+
+  if (!tokenResponse.ok) {
+    throw new Error(tokenData.error_description || 'Failed to refresh token with Xero. Re-authentication required.');
+  }
+
+  const newAccessToken = tokenData.access_token;
+  const newRefreshToken = tokenData.refresh_token;
+  const newExpiresAt = Math.floor(Date.now() / 1000) + tokenData.expires_in;
+
+  // Update Supabase with the newly refreshed tokens
+  const { error: updateError } = await supabase
+    .from('xero_tokens')
+    .update({
+      access_token: newAccessToken,
+      refresh_token: newRefreshToken,
+      expires_at: newExpiresAt,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', data.id);
+
+  if (updateError) {
