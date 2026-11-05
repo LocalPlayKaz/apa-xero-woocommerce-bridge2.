@@ -11,6 +11,7 @@ export default async function handler(req, res) {
   }
 
   const { code } = req.query;
+  const redirectUri = process.env.XERO_REDIRECT_URI || 'https://apa-xero-woocommerce-bridge2.vercel.app/api/auth';
 
   if (!code) {
     return res.status(400).json({ error: 'Authorization code missing from Xero redirect' });
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
-        redirect_uri: process.env.XERO_REDIRECT_URI
+        redirect_uri: redirectUri
       })
     });
 
@@ -54,11 +55,11 @@ export default async function handler(req, res) {
       throw new Error('No Xero tenant found for this connection.');
     }
 
-    // 3. Upsert the live tokens into Supabase (replacing your placeholders!)
+    // 3. Upsert the live tokens into Supabase
     const { error: dbError } = await supabase
       .from('xero_tokens')
       .upsert({
-        id: 1, // Singleton row
+        id: 1,
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         expires_at: Math.floor(Date.now() / 1000) + tokenData.expires_in,
@@ -70,7 +71,6 @@ export default async function handler(req, res) {
       throw new Error(`Supabase save error: ${dbError.message}`);
     }
 
-    // Success! Redirect or return confirmation
     return res.status(200).send('Xero Authentication Successful! Tokens saved to Supabase. You can close this window.');
 
   } catch (err) {
