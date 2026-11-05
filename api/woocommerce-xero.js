@@ -25,7 +25,7 @@ export async function processWooOrderToXero(order) {
       Quantity: item.quantity || 1,
       UnitAmount: item.price || 0,
       LineAmount: item.total || 0,
-      AccountCode: '200' // Adjust to your Xero sales account code
+      AccountCode: '200' // Ensure this matches a valid sales account code in your Xero Chart of Accounts
     };
   });
 
@@ -47,18 +47,25 @@ export async function processWooOrderToXero(order) {
     throw new Error('Missing Xero Tenant ID in Supabase or environment variables.');
   }
 
-  // Send to Xero API using the active access token and corrected endpoint path
-  const response = await axios.post(
-    'https://api.xero.com/api.xro/2.0/Invoices',
-    { Invoices: [invoice] },
-    {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-        'Xero-tenant-id': tenantId,
-        'Content-Type': 'application/json'
+  try {
+    // Send to Xero API using the active access token
+    const response = await axios.post(
+      'https://api.xero.com/api.xro/2.0/Invoices',
+      { Invoices: [invoice] },
+      {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+          'Xero-tenant-id': tenantId,
+          'Content-Type': 'application/json'
+        }
       }
-    }
-  );
+    );
 
-  return response.data;
+    return response.data;
+  } catch (err) {
+    // Extract and log Xero's detailed validation error response if available
+    const xeroError = err.response?.data ? JSON.stringify(err.response.data, null, 2) : err.message;
+    console.error('Xero API Rejection Details:', xeroError);
+    throw new Error(`Xero validation failed: ${xeroError}`);
+  }
 }
