@@ -10,19 +10,16 @@ export async function getXeroToken() {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // Query your token table (verify your table name matches 'xero_tokens')
+  // Fetch the latest token row securely, ordered by ID descending
   const { data, error } = await supabase
     .from('xero_tokens')
     .select('*')
+    .order('id', { ascending: false })
     .limit(1)
     .single();
 
-  if (error) {
-    throw new Error(`Supabase query error: ${error.message} (Hint: Check if table 'xero_tokens' exists)`);
-  }
-
-  if (!data) {
-    throw new Error('Supabase returned no rows in xero_tokens table.');
+  if (error || !data) {
+    throw new Error(`Failed to fetch Xero token from Supabase: ${error?.message || 'No token rows found'}`);
   }
 
   return data;
