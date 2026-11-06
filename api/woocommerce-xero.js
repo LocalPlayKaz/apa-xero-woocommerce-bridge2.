@@ -25,7 +25,7 @@ export async function processWooOrderToXero(order) {
       Quantity: item.quantity || 1,
       UnitAmount: item.price || 0,
       LineAmount: item.total || 0,
-      AccountCode: '200' // Ensure this matches a valid sales account code in your Xero Chart of Accounts
+      AccountCode: '4500' // Configured to your accountant's specified revenue account code
     };
   });
 
@@ -48,7 +48,6 @@ export async function processWooOrderToXero(order) {
   }
 
   try {
-    // Send to Xero API using the active access token
     const response = await axios.post(
       'https://api.xero.com/api.xro/2.0/Invoices',
       { Invoices: [invoice] },
@@ -63,7 +62,6 @@ export async function processWooOrderToXero(order) {
 
     return response.data;
   } catch (err) {
-    // Extract and log Xero's detailed validation error response if available
     const xeroError = err.response?.data ? JSON.stringify(err.response.data, null, 2) : err.message;
     console.error('Xero API Rejection Details:', xeroError);
     throw new Error(`Xero validation failed: ${xeroError}`);
