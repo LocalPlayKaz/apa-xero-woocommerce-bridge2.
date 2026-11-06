@@ -28,7 +28,6 @@ async function getAccessTokenAndTenant() {
   const expiresAt = parseExpiresAt(tokenData.expires_at);
   const tenantId = tokenData.tenant_id || process.env.XERO_TENANT_ID;
 
-  // Check if token is still valid (with 2-minute buffer)
   if (now < expiresAt - 120000) {
     return { accessToken: tokenData.access_token, tenantId };
   }
@@ -42,7 +41,6 @@ async function getAccessTokenAndTenant() {
   }
 
   try {
-    // Re-check inside lock in case a parallel webhook just refreshed it
     const { data: freshCheck } = await supabase
       .from('xero_tokens')
       .select('*')
@@ -66,3 +64,83 @@ async function getAccessTokenAndTenant() {
     tokenParams.append('refresh_token', currentRefresh);
 
     const tokenRes = await axios.post(
+      'https://identity.xero.com/connect/token',
+      tokenParams.toString(),
+      {
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
+
+    const newAccessToken = tokenRes.data.access_token;
+    const newRefreshToken = tokenRes.data.refresh_token;
+    const expiresIn = tokenRes.data.expires_in || 1800;
+    const newExpiresAt = new Date(Date.now() + (expiresIn * 1000)).toISOString();
+
+    const { error: updateErr } = await supabase
+      .from('xero_tokens')
+      .update({
+        access_token: newAccessToken,
+        refresh_token: newRefreshToken,
+        expires_at: newExpiresAt,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', tokenData.id);
+
+    if (updateErr) {
+      throw new Error(`Supabase token update failed: ${updateErr.message}`);
+    }
+
+    return { accessToken: newAccessToken, tenantId };
+  } catch (err) {
+    console.error('Token refresh failed:', err.response?.data || err.message);
+    throw err;
+  } finally {
+    await supabase.rpc('release_token_lock', { lock_id: 'xero_refresh_lock' });
+  }
+}
+
+async function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => { data += chunk; });
+    req.on('end', () => { resolve(data); });
+    req.on('error', err => { reject(err); });
+  });
+}
+
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method Not Allowed' });
+  }
+
+  try {
+    const rawBodyString = await getRawBody(req);
+    let body = {};
+    try {
+      body = JSON.parse(rawBodyString);
+    } catch (e) {
+      try {
+        body = require('querystring').parse(rawBodyString);
+      } catch (err) {
+        body = {};
+      }
+    }
+
+    const payload = body?.order || body?.data || body;
+    const orderId = payload?.id || payload?.order_id || payload?.ID;
+    const parentId = payload?.parent_id || payload?.parentID || 0;
+
+    console.log(`Incoming Payload ID: ${orderId} Parent ID: ${parentId}`);
+
+    if (!payload || !orderId) {
+      return res.status(200).json({ status: 'ignored', message: 'No order ID found.' });
+    }
+
+    const hasSubOrderMeta = payload.meta_data?.some(
+      meta => meta.key === 'has_sub_order' && (meta.value === true || meta.value === '1' || meta.value === 'yes')
+    );
+    const hasSubOrder = payload.has_sub_order || hasSubOrderMeta;
+    const isParentOrder = (!parentId || parentId === 0 || parentId === '0') && hasSubOrder;
