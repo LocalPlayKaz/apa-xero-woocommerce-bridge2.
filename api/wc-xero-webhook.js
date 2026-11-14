@@ -61,17 +61,25 @@ export default async function handler(req, res) {
       return res.status(200).json({ skipped: true, reason: `Status is ${order.status}` });
     }
 
-    // 4. Confirm PayPal payment method (PayPal Payments wallet or Advanced Card fields)
-    const allowedGateways = ['ppcp-gateway', 'ppcp-credit-card-gateway'];
+    // 4. Confirm payment method (supports Stripe and PayPal gateways)
+    const allowedGateways = ['stripe', 'ppcp-gateway', 'ppcp-credit-card-gateway', 'other'];
     if (!allowedGateways.includes(order.payment_method)) {
       return res.status(200).json({ skipped: true, reason: `Gateway ${order.payment_method}` });
     }
 
-    // 5. Extract Dokan Vendor Name from metadata
-    const vendorMeta = meta.find((m) =>
+    // 5. Extract Vendor / Company Name from top-level fields first, then metadata
+    const metaVendorName = meta.find((m) =>
       ['_dokan_vendor_name', 'store_name', 'seller_name'].includes(m.key)
-    );
-    const vendorName = vendorMeta?.value || 'APA Direct';
+    )?.value;
+
+    const vendorName =
+      order.forced_vendor_name ||
+      order.store?.shop_name ||
+      order.store?.name ||
+      (Array.isArray(order.stores) && order.stores[0]?.shop_name) ||
+      (Array.isArray(order.stores) && order.stores[0]?.name) ||
+      metaVendorName ||
+      'APA Direct';
 
     // 6. Build Xero Line Items (Account Code 4500 for Store Sales)
     const lineItems = (order.line_items || []).map((item) => ({
@@ -113,7 +121,7 @@ export default async function handler(req, res) {
           Date: new Date().toISOString().split('T')[0],
           DueDate: new Date().toISOString().split('T')[0],
           InvoiceNumber: `WC-${order.id}`,
-          Reference: `PayPal Tx: ${order.transaction_id || order.id} | Vendor: ${vendorName}`,
+          Reference: `Payment Tx: ${order.transaction_id || order.id} | Vendor: ${vendorName}`,
           Status: 'AUTHORISED',
           LineAmountTypes: 'Exclusive',
           LineItems: lineItems,
