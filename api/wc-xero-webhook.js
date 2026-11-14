@@ -48,12 +48,12 @@ export default async function handler(req, res) {
     const order = JSON.parse(bodyText);
     const meta = order.meta_data || [];
 
-    // 2. Dokan Parent Order Guard: Skip parent container orders to prevent double-billing
-    const hasSubOrders = meta.some(
-      (m) => m.key === '_dokan_has_sub_order' && (m.value === '1' || m.value === true)
+    // 2. Dokan Parent Order Guard: Skip parent container orders ONLY if parent_id is 0 and it has sub-orders
+    const hasSubOrdersMeta = meta.some(
+      (m) => (m.key === '_dokan_has_sub_order' || m.key === 'has_sub_order') && (m.value === '1' || m.value === true || m.value === 'yes')
     );
-    if (order.parent_id === 0 && hasSubOrders) {
-      return res.status(200).json({ skipped: true, reason: 'Dokan parent order' });
+    if (Number(order.parent_id) === 0 && hasSubOrdersMeta) {
+      return res.status(200).json({ skipped: true, reason: 'Dokan parent order container skipped' });
     }
 
     // 3. Only sync paid orders in processing/completed state
