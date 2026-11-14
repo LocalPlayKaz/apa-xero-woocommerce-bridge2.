@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getValidXeroToken } from './xero-utils.js';
+import { getXeroToken } from './xero-utils.js';
 
 export const config = {
   api: {
@@ -29,10 +29,15 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true, ping: true });
     }
 
-    // 1. Verify WooCommerce HMAC-SHA256 Signature
+    // 1. Verify WooCommerce HMAC-SHA256 Signature using WC_PAYPAL_WEBHOOK_SECRET
+    const webhookSecret =
+      process.env.WC_PAYPAL_WEBHOOK_SECRET ||
+      process.env.WOO_WEBHOOK_SECRET ||
+      process.env.WC_WEBHOOK_SECRET;
+
     const signature = req.headers['x-wc-webhook-signature'];
     const expectedSig = crypto
-      .createHmac('sha256', process.env.WC_WEBHOOK_SECRET)
+      .createHmac('sha256', webhookSecret)
       .update(rawBody)
       .digest('base64');
 
@@ -87,8 +92,10 @@ export default async function handler(req, res) {
       });
     }
 
-    // 7. Get locked/refreshed Xero token from Supabase & push invoice
-    const { accessToken, tenantId } = await getValidXeroToken();
+    // 7. Get refreshed Xero token from Supabase & push invoice
+    const tokenRow = await getXeroToken();
+    const accessToken = tokenRow.access_token;
+    const tenantId = tokenRow.tenant_id || process.env.XERO_TENANT_ID;
 
     const contactName =
       order.billing?.company?.trim() ||
